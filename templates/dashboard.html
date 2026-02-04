@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="container-fluid px-4" style="max-width: 1800px;">
+    <!-- 업로드 실패 목록 다운로드 영역 -->
+    {% if session.get('failed_count') and session.get('failed_count') > 0 %}
+    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center gap-3 mb-3" role="alert" style="border-left: 4px solid #f59e0b;">
+      <div class="flex-shrink-0">
+        <i class="bi bi-exclamation-triangle-fill fs-4" style="color: #f59e0b;"></i>
+      </div>
+      <div class="flex-grow-1">
+        <h6 class="alert-heading mb-1">
+          <i class="bi bi-file-earmark-excel"></i> 업로드 실패 항목 발견
+        </h6>
+        <p class="mb-0">
+          <strong>{{ "{:,}".format(session.get('failed_count')) }}개 항목</strong>이 업로드되지 못했습니다. 
+          실패 사유를 확인하려면 아래 버튼을 클릭하세요.
+        </p>
+      </div>
+      <div class="flex-shrink-0">
+        <a href="{{ url_for('download_failed') }}" class="btn btn-warning btn-sm">
+          <i class="bi bi-download"></i> 실패 목록 다운로드
+        </a>
+      </div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="d-flex align-items-end justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="h5 fw-semibold mb-1" style="color: #f1f5f9;">📊 재고 대시보드</h2>
+        <div class="small" style="color: #cbd5e1;">최종 업데이트: <span class="fw-semibold" style="color: #e2e8f0;">{{ latest_date }}</span></div>
+      </div>
+      <div class="d-flex gap-2">
+        <div class="dropdown">
+          <button class="btn btn-success dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-download"></i> 백업/내보내기
+          </button>
+          <ul class="dropdown-menu">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('export_current') }}">
+                <i class="bi bi-file-earmark-excel text-success"></i> 현재 데이터 엑셀 내보내기
+                <small class="d-block text-muted">현재 데이터 ({{ latest_date }})</small>
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('export_database') }}">
+                <i class="bi bi-database text-primary"></i> 전체 DB 백업
+                <small class="d-block text-muted">모든 히스토리 포함</small>
+              </a>
+            </li>
+          </ul>
+        </div>
+        <a class="btn btn-primary" href="{{ url_for('upload_get') }}">
+          <i class="bi bi-upload"></i> 엑셀 업로드
+        </a>
+      </div>
+    </div>
+
+    <!-- 전체 데이터 KPI 헤더 -->
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <h3 class="h6 fw-semibold mb-0" style="color: #e2e8f0;">
+        <i class="bi bi-globe" style="color: #60a5fa;"></i> 전체 데이터 현황
+      </h3>
+      <span class="badge bg-secondary">필터 적용 전</span>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="text-muted small mb-1">📦 품목 수</div>
+                <div class="h4 mb-0 fw-bold">{{ "{:,}".format(kpi.total_items) }}</div>
+              </div>
+              <div class="kpi-icon bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-box"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="text-muted small mb-1">📊 총 재고</div>
+                <div class="h4 mb-0 fw-bold">{{ "{:,}".format(kpi.total_stock) }}</div>
+              </div>
+              <div class="kpi-icon bg-info bg-opacity-10 text-info">
+                <i class="bi bi-stack"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card kpi-danger shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #fca5a5;">🔥 긴급필업</div>
+                <div class="h4 mb-0 fw-bold" style="color: #fecaca;">{{ "{:,}".format(kpi.oos) }}</div>
+              </div>
+              <div class="kpi-icon bg-danger bg-opacity-10" style="color: #fca5a5;">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card shadow border-0 h-100" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(239, 68, 68, 0.02) 100%); border-left: 4px solid #ef4444 !important;">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #fca5a5;">📉 결품률</div>
+                <div class="h4 mb-0 fw-bold" style="color: #fecaca;">{{ "%.1f"|format(kpi.stockout_rate) }}%</div>
+                <div style="font-size: 0.7rem; color: #cbd5e1;">{{ "{:,}".format(kpi.stockout_count) }}개</div>
+              </div>
+              <div class="kpi-icon bg-danger bg-opacity-10" style="color: #fca5a5;">
+                <i class="bi bi-x-circle-fill"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card kpi-warning shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #fde68a;">⚠️ 체크필요</div>
+                <div class="h4 mb-0 fw-bold" style="color: #fef3c7;">{{ "{:,}".format(kpi.low) }}</div>
+              </div>
+              <div class="kpi-icon bg-warning bg-opacity-10" style="color: #fde68a;">
+                <i class="bi bi-check-circle"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card shadow border-0 h-100" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(14, 165, 233, 0.02) 100%); border-left: 4px solid #0ea5e9 !important;">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #7dd3fc;">🏪 매장품목</div>
+                <div class="h4 mb-0 fw-bold" style="color: #a5f3fc;">{{ "{:,}".format(kpi.has_channel) }}</div>
+              </div>
+              <div class="kpi-icon" style="background-color: rgba(14, 165, 233, 0.1); color: #7dd3fc;">
+                <i class="bi bi-shop-window"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card shadow border-0 h-100" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(14, 165, 233, 0.02) 100%); border-left: 4px solid #0ea5e9 !important;">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #7dd3fc;">🛒 매장총량</div>
+                <div class="h4 mb-0 fw-bold" style="color: #a5f3fc;">{{ "{:,}".format(kpi.total_channel_stock) }}</div>
+              </div>
+              <div class="kpi-icon" style="background-color: rgba(14, 165, 233, 0.1); color: #7dd3fc;">
+                <i class="bi bi-bag-check"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card kpi-success shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #86efac;">🏭 물류품목</div>
+                <div class="h4 mb-0 fw-bold" style="color: #bbf7d0;">{{ "{:,}".format(kpi.has_warehouse) }}</div>
+              </div>
+              <div class="kpi-icon bg-success bg-opacity-10" style="color: #86efac;">
+                <i class="bi bi-truck"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="card kpi-card kpi-success shadow border-0 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-semibold" style="color: #86efac;">📦 물류 가용 재고</div>
+                <div class="h4 mb-0 fw-bold" style="color: #bbf7d0;">{{ "{:,}".format(kpi.total_warehouse_stock) }}</div>
+              </div>
+              <div class="kpi-icon bg-success bg-opacity-10" style="color: #86efac;">
+                <i class="bi bi-box-seam"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 복종별 결품률 -->
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <h3 class="h6 fw-semibold mb-0 text-white">
+        <i class="bi bi-diagram-3 text-warning"></i> 복종별 결품률
+      </h3>
+      <span class="badge bg-warning text-dark">SKU 8번째 자리 기준</span>
+    </div>
+    <div class="row g-2 mb-4">
+      {% for cat in category_stockout_stats %}
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="card shadow-sm border-0 h-100" style="background: rgba(30, 41, 59, 0.6); border-left: 3px solid {% if cat.rate >= 20 %}#ef4444{% elif cat.rate >= 10 %}#f59e0b{% else %}#10b981{% endif %} !important; backdrop-filter: blur(10px);">
+          <div class="card-body p-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="small mb-1 fw-bold" style="font-size: 0.85rem; color: #e2e8f0;">복종 {{ cat.code }}</div>
+                <div class="h5 mb-0 fw-bold" style="color: {% if cat.rate >= 20 %}#fca5a5{% elif cat.rate >= 10 %}#fbbf24{% else %}#6ee7b7{% endif %};">
+                  {{ "%.1f"|format(cat.rate) }}%
+                </div>
+                <div style="font-size: 0.65rem; color: #cbd5e1;">{{ cat.stockout }}/{{ cat.total }}개</div>
+              </div>
+              <div class="badge text-white" style="background-color: {% if cat.rate >= 20 %}#ef4444{% elif cat.rate >= 10 %}#f59e0b{% else %}#10b981{% endif %};">
+                {% if cat.rate >= 20 %}
+                  위험
+                {% elif cat.rate >= 10 %}
+                  주의
+                {% else %}
+                  양호
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- 위험 SKU 써머리 -->
+    {% if high_risk_summary %}
+    <div class="card shadow-sm border-danger mb-3">
+      <div class="card-header bg-danger text-white">
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="flex-grow-1">
+            <h3 class="h6 fw-semibold mb-0">🔥 긴급 주의: 판매량 높은 위험 SKU (상위 30개)</h3>
+            <small>판매량이 많은데 재고가 부족하거나 소진 예상 14일 이내</small>
+          </div>
+          <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
+              <small class="text-white-50" style="font-size: 0.75rem;">
+                <i class="bi bi-funnel-fill"></i> 복종:
+              </small>
+              <div class="btn-group btn-group-sm" role="group">
+                {% for uc in urgent_categories %}
+                  <a href="{{ url_for('dashboard', 
+                    category=selected.category, 
+                    q=selected.q, 
+                    low_only='1' if selected.low_only else None,
+                    warehouse_only='1' if selected.warehouse_only else None,
+                    channel_only='1' if selected.channel_only else None,
+                    warehouse_center=selected.warehouse_center,
+                    season_code=selected.season_codes,
+                    urgent_category=uc,
+                    target_cover_days=selected.target_cover_days,
+                    sku=selected.sku
+                  ) }}" 
+                  class="btn {% if uc == selected.urgent_category %}btn-light{% else %}btn-outline-light{% endif %}"
+                  style="
+                    font-size: 0.75rem; 
+                    padding: 0.25rem 0.6rem; 
+                    border-radius: {% if loop.first %}0.375rem 0 0 0.375rem{% elif loop.last %}0 0.375rem 0.375rem 0{% else %}0{% endif %};
+                    border: 1px solid rgba(255,255,255,{% if uc == selected.urgent_category %}0.9{% else %}0.3{% endif %});
+                    background-color: {% if uc == selected.urgent_category %}rgba(255,255,255,0.95){% else %}rgba(255,255,255,0.1){% endif %};
+                    color: {% if uc == selected.urgent_category %}#dc2626{% else %}rgba(255,255,255,0.9){% endif %};
+                    font-weight: {% if uc == selected.urgent_category %}600{% else %}400{% endif %};
+                    transition: all 0.2s ease;
+                    text-decoration: none;
+                  "
+                  onmouseover="if('{{ uc }}' != '{{ selected.urgent_category }}') { this.style.backgroundColor='rgba(255,255,255,0.2)'; this.style.borderColor='rgba(255,255,255,0.5)'; }"
+                  onmouseout="if('{{ uc }}' != '{{ selected.urgent_category }}') { this.style.backgroundColor='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.3)'; }">
+                    {% if uc == "(전체)" %}
+                      <i class="bi bi-grid-3x3-gap-fill"></i> 전체
+                    {% else %}
+                      {{ uc }}
+                    {% endif %}
+                  </a>
+                {% endfor %}
+              </div>
+            </div>
+            <span class="badge bg-light text-dark" style="font-size: 0.7rem; padding: 0.35rem 0.6rem;">
+              <i class="bi bi-database-fill"></i> 전체 데이터 기준
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <table class="table table-sm table-hover mb-0 sortable-table">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
+              <tr style="font-size: 0.8rem;">
+                <th style="padding: 0.4rem 0.5rem;">순위</th>
+                <th class="sortable" style="padding: 0.4rem 0.5rem;">상태</th>
+                <th class="sortable" style="padding: 0.4rem 0.5rem;">상품코드</th>
+                <th class="sortable" style="padding: 0.4rem 0.5rem;">SKU</th>
+                <th class="sortable" style="padding: 0.4rem 0.5rem;">상품명</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">일평균판매</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">현재재고</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem; background-color: #e0f2fe; color: #075985; font-weight: 600;">매장<br>재고</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">센터1</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">센터2</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">물류재고</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">소진일</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">필업 제안</th>
+                <th class="text-end sortable" style="padding: 0.4rem 0.5rem; background-color: #fef3c7; color: #92400e; font-weight: 600;">분배<br>가능</th>
+              </tr>
+            </thead>
+            <tbody style="font-size: 0.85rem;">
+              {% for r in high_risk_summary %}
+                <tr>
+                  <td class="fw-semibold" style="padding: 0.4rem 0.5rem;">{{ loop.index }}</td>
+                  <td style="padding: 0.4rem 0.5rem;"><span class="badge text-bg-{{ status_badge(r.status) }}" style="font-size: 0.7rem;">{{ r.status }}</span></td>
+                  <td class="small" style="padding: 0.4rem 0.5rem;">
+                    <span class="text-muted">{{ r.product_code }}</span>
+                  </td>
+                  <td class="small" style="padding: 0.4rem 0.5rem;">
+                    {% if r.sku.startswith('S') %}
+                      <span class="fw-semibold" style="color: #000;">{{ r.sku }}</span>
+                    {% else %}
+                      <span class="fw-semibold text-danger">{{ r.sku }}</span>
+                      <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">오류</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-truncate" style="max-width: 130px; padding: 0.4rem 0.5rem; color: #000;">{{ r.name or "" }}</td>
+                  <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; color: #2563eb;">{{ "%.1f"|format(r.daily_sales_7d) }}</td>
+                  <td class="text-end" style="padding: 0.4rem 0.5rem; color: #000;">{{ "{:,}".format(r.stock) }}</td>
+                  <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; background-color: rgba(224, 242, 254, 0.4); color: #0369a1;">{{ "{:,}".format(r.channel_stock) }}</td>
+                  <td class="text-end small" style="padding: 0.4rem 0.5rem; color: #16a34a;">{{ "{:,}".format(r.warehouse1_stock) }}</td>
+                  <td class="text-end small" style="padding: 0.4rem 0.5rem; color: #0284c7;">{{ "{:,}".format(r.warehouse2_stock) }}</td>
+                  <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; color: #0284c7;">{{ "{:,}".format(r.warehouse_stock) }}</td>
+                  <td class="text-end {% if r.days_until_out < 7 %}fw-bold{% endif %}" style="padding: 0.4rem 0.5rem; color: {% if r.days_until_out < 7 %}#dc2626{% elif r.days_until_out < 14 %}#d97706{% else %}#000{% endif %};">
+                    {% if r.days_until_out >= 999 %}-{% else %}{{ "%.0f"|format(r.days_until_out) }}일{% endif %}
+                  </td>
+                  <td class="text-end fw-bold" style="padding: 0.4rem 0.5rem; color: #000;">{{ "{:,}".format(r.suggested_order_qty) }}</td>
+                  <td class="text-end fw-bold" style="padding: 0.4rem 0.5rem; background-color: rgba(254, 243, 199, 0.4); color: #d97706;">
+                    {{ "{:,}".format([r.warehouse_stock, r.suggested_order_qty]|min) }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- 필터 영역 (컴팩트 디자인) -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body p-3">
+        <form method="get" action="{{ url_for('dashboard') }}">
+          <!-- 첫 번째 줄 -->
+          <div class="row g-2 mb-2">
+            <div class="col-auto" style="width: 140px;">
+              <label class="form-label small fw-semibold mb-1"><i class="bi bi-funnel"></i> 상태</label>
+              <select class="form-select form-select-sm" name="category">
+                {% for c in categories %}
+                  <option value="{{ c }}" {% if c == selected.category %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-auto">
+              <label class="form-label small fw-semibold mb-1"><i class="bi bi-calendar3"></i> 시즌 (다중선택)</label>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="seasonDropdown" data-bs-toggle="dropdown" style="width: 180px; text-align: left;">
+                  {% if selected.season_codes|length > 0 %}
+                    {{ selected.season_codes|length }}개 선택됨
+                  {% else %}
+                    전체
+                  {% endif %}
+                </button>
+                <ul class="dropdown-menu p-2" style="max-height: 300px; overflow-y: auto; min-width: 180px;">
+                  <!-- 전체선택/해제 버튼 -->
+                  <li class="mb-1 pb-1 border-bottom">
+                    <div class="d-flex gap-1">
+                      <button type="button" class="btn btn-outline-primary w-50" onclick="selectAllSeasons()" style="font-size: 0.7rem; padding: 0.15rem 0.3rem;">
+                        <i class="bi bi-check-square" style="font-size: 0.75rem;"></i> 전체선택
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary w-50" onclick="deselectAllSeasons()" style="font-size: 0.7rem; padding: 0.15rem 0.3rem;">
+                        <i class="bi bi-square" style="font-size: 0.75rem;"></i> 전체해제
+                      </button>
+                    </div>
+                  </li>
+                  {% for s in season_codes %}
+                    {% if s != "(전체)" %}
+                    <li style="padding: 0.1rem 0;">
+                      <div class="form-check" style="margin-bottom: 0;">
+                        <input class="form-check-input season-checkbox" type="checkbox" name="season_code" value="{{ s }}" id="season_{{ s }}" 
+                          {% if s in selected.season_codes %}checked{% endif %}>
+                        <label class="form-check-label small" for="season_{{ s }}" style="font-size: 0.8rem;">
+                          🗓️ {{ s }}
+                        </label>
+                      </div>
+                    </li>
+                    {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+            <div class="col">
+              <label class="form-label small fw-semibold mb-1">
+                <i class="bi bi-search"></i> 검색
+                <i class="bi bi-info-circle text-muted" 
+                   data-bs-toggle="tooltip" 
+                   data-bs-placement="top"
+                   title="다중 검색 가능! 공백=AND, 쉼표=OR &#10;예) 'SPPP G11' (둘다포함) 또는 'SPPP, G23' (하나라도포함)" 
+                   style="font-size: 0.75rem; cursor: help;"></i>
+              </label>
+              <input class="form-control form-control-sm" name="q" value="{{ selected.q }}" 
+                     placeholder="예: SPPP G11 또는 SPPP, G23 (공백=AND, 쉼표=OR)" 
+                     style="font-size: 0.85rem;" />
+            </div>
+            <div class="col-auto" style="width: 100px;">
+              <label class="form-label small fw-semibold mb-1"><i class="bi bi-calendar-week"></i> 발주일</label>
+              <input class="form-control form-control-sm" type="number" min="1" max="90" name="target_cover_days" value="{{ selected.target_cover_days }}" />
+            </div>
+            <div class="col-auto" style="width: 110px;">
+              <label class="form-label small fw-semibold mb-1"><i class="bi bi-truck"></i> 물류센터</label>
+              <select class="form-select form-select-sm" name="warehouse_center">
+                <option value="전체" {% if selected.warehouse_center == "전체" %}selected{% endif %}>전체</option>
+                <option value="센터1" {% if selected.warehouse_center == "센터1" %}selected{% endif %}>센터1</option>
+                <option value="센터2" {% if selected.warehouse_center == "센터2" %}selected{% endif %}>센터2</option>
+              </select>
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-1">&nbsp;</label>
+              <button class="btn btn-primary btn-sm w-100" type="submit">
+                <i class="bi bi-filter-circle"></i> 적용
+              </button>
+            </div>
+          </div>
+          <!-- 두 번째 줄: 체크박스 -->
+          <div class="row g-2">
+            <div class="col-auto">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" value="1" id="low_only" name="low_only" {% if selected.low_only %}checked{% endif %} />
+                <label class="form-check-label small fw-semibold" for="low_only">
+                  ⚠️ 주의 필요만
+                </label>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" value="1" id="warehouse_only" name="warehouse_only" {% if selected.warehouse_only %}checked{% endif %} />
+                <label class="form-check-label small fw-semibold" for="warehouse_only">
+                  🏭 물류재고 있음만
+                </label>
+              </div>
+            </div>
+            <div class="col-auto">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" value="1" id="channel_only" name="channel_only" {% if selected.channel_only %}checked{% endif %} />
+                <label class="form-check-label small fw-semibold" for="channel_only">
+                  🏪 매장재고 있음만
+                </label>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 필터링된 결과 KPI -->
+    <div class="card shadow-sm border-0 mb-3" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h3 class="h6 fw-semibold mb-0">
+            <i class="bi bi-funnel-fill text-primary"></i> 필터링된 결과
+          </h3>
+          <span class="badge bg-primary">현재 필터 적용값</span>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="d-flex align-items-center gap-3 p-3 bg-white rounded-3 shadow-sm">
+              <div class="kpi-icon bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-box"></i>
+              </div>
+              <div>
+                <div class="text-muted small mb-1">필터링된 품목 수</div>
+                <div class="h4 mb-0 fw-bold text-primary">{{ "{:,}".format(kpi_filtered.total_items) }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex align-items-center gap-3 p-3 bg-white rounded-3 shadow-sm">
+              <div class="kpi-icon bg-danger bg-opacity-10 text-danger">
+                <i class="bi bi-x-circle-fill"></i>
+              </div>
+              <div>
+                <div class="text-muted small mb-1">필터링된 결품률</div>
+                <div class="h4 mb-0 fw-bold text-danger">
+                  {{ "%.1f"|format(kpi_filtered.stockout_rate) }}%
+                  <span class="small text-muted fw-normal">({{ "{:,}".format(kpi_filtered.stockout_count) }}개)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12">
+        <div class="card shadow-sm border-0">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h3 class="fw-semibold mb-0" style="font-size: 0.95rem; color: #000;">재고 현황 (판매량 높은 순)</h3>
+              <span class="small" style="color: #6b7280; font-size: 0.75rem;">판매량 기반 분석</span>
+            </div>
+            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+              <table class="table table-sm align-middle mb-0 table-hover sortable-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
+                  <tr style="font-size: 0.8rem;">
+                    <th class="sortable" style="padding: 0.4rem 0.5rem;">상태</th>
+                    <th class="sortable" style="padding: 0.4rem 0.5rem;">상품코드</th>
+                    <th class="sortable" style="padding: 0.4rem 0.5rem;">SKU</th>
+                    <th class="sortable" style="padding: 0.4rem 0.5rem;">상품명</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">일평균<br>판매</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">현재<br>재고</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem; background-color: #e0f2fe; color: #075985; font-weight: 600;">매장<br>재고</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">센터1</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">센터2</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">물류재고<br>(합계)</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">소진<br>예상일</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem;">필업<br>제안</th>
+                    <th class="text-end sortable" style="padding: 0.4rem 0.5rem; background-color: #fef3c7; color: #92400e; font-weight: 600;">분배<br>가능</th>
+                  </tr>
+                </thead>
+                <tbody style="font-size: 0.85rem;">
+                  {% for r in table %}
+                    <tr class="{% if r.status == '긴급필업' %}row-oos{% elif r.status == '필업필요' %}row-low{% elif r.status == '체크필요' %}row-check{% elif r.status == '필업검토' %}row-reorder{% endif %}">
+                      <td style="padding: 0.4rem 0.5rem;"><span class="badge text-bg-{{ status_badge(r.status) }}" style="font-size: 0.7rem;">{{ r.status }}</span></td>
+                      <td class="small" style="padding: 0.4rem 0.5rem;">
+                        <span class="text-muted">{{ r.product_code }}</span>
+                      </td>
+                      <td class="small" style="padding: 0.4rem 0.5rem;">
+                        {% if r.sku.startswith('S') %}
+                          <span class="fw-semibold" style="color: #000;">{{ r.sku }}</span>
+                        {% else %}
+                          <span class="fw-semibold text-danger">{{ r.sku }}</span>
+                          <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">오류</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-truncate" style="max-width: 150px; padding: 0.4rem 0.5rem; color: #000;">{{ r.name or "" }}</td>
+                      <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; color: #2563eb;">{{ "%.1f"|format(r.daily_sales_7d) }}</td>
+                      <td class="text-end" style="padding: 0.4rem 0.5rem; color: #000;">{{ "{:,}".format(r.stock) }}</td>
+                      <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; background-color: rgba(224, 242, 254, 0.4); color: #0369a1;">{{ "{:,}".format(r.channel_stock) }}</td>
+                      <td class="text-end small" style="padding: 0.4rem 0.5rem; color: #16a34a;">{{ "{:,}".format(r.warehouse1_stock) }}</td>
+                      <td class="text-end small" style="padding: 0.4rem 0.5rem; color: #0284c7;">{{ "{:,}".format(r.warehouse2_stock) }}</td>
+                      <td class="text-end fw-semibold" style="padding: 0.4rem 0.5rem; color: #0284c7;">{{ "{:,}".format(r.warehouse_stock) }}</td>
+                      <td class="text-end {% if r.days_until_out < 7 %}fw-bold{% endif %}" style="padding: 0.4rem 0.5rem; color: {% if r.days_until_out < 7 %}#dc2626{% elif r.days_until_out < 14 %}#d97706{% else %}#000{% endif %};">
+                        {% if r.days_until_out >= 999 %}-{% else %}{{ "%.0f"|format(r.days_until_out) }}일{% endif %}
+                      </td>
+                      <td class="text-end fw-bold" style="padding: 0.4rem 0.5rem; color: #000;">{{ "{:,}".format(r.suggested_order_qty) }}</td>
+                      <td class="text-end fw-bold" style="padding: 0.4rem 0.5rem; background-color: rgba(254, 243, 199, 0.4); color: #d97706;">
+                        {{ "{:,}".format([r.warehouse_stock, r.suggested_order_qty]|min) }}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="small mt-2" style="color: #94a3b8;">
+              ※ 물류재고 = 센터1 + 센터2 (각 센터: 솔리드+아소트). 소진 예상일은 현재 재고 + 물류 재고 기준입니다.<br>
+              ※ <span style="color: #f59e0b; font-weight: 600;">분배 가능</span> = 물류재고와 필업제안 중 작은 값 (실제 물류에서 분배받을 수 있는 최대 수량)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card shadow-sm border-0">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h3 class="h6 fw-semibold mb-0">품목별 재고 변동</h3>
+            </div>
+            <form method="get" action="{{ url_for('dashboard') }}" class="row g-2 align-items-end mb-2">
+              <input type="hidden" name="category" value="{{ selected.category }}" />
+              {% for sc in selected.season_codes %}
+                <input type="hidden" name="season_code" value="{{ sc }}" />
+              {% endfor %}
+              <input type="hidden" name="q" value="{{ selected.q }}" />
+              <input type="hidden" name="target_cover_days" value="{{ selected.target_cover_days }}" />
+              <input type="hidden" name="warehouse_center" value="{{ selected.warehouse_center }}" />
+              {% if selected.low_only %}<input type="hidden" name="low_only" value="1" />{% endif %}
+              {% if selected.warehouse_only %}<input type="hidden" name="warehouse_only" value="1" />{% endif %}
+              <div class="col-8">
+                <label class="form-label small text-muted mb-1">SKU</label>
+                <select class="form-select" name="sku">
+                  {% for s in sku_list %}
+                    <option value="{{ s }}" {% if s == selected.sku %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-4">
+                <button class="btn btn-outline-dark w-100" type="submit">보기</button>
+              </div>
+            </form>
+
+            {% if chart_sku_line_html %}
+              <div class="plotly-wrap mb-2">{{ chart_sku_line_html | safe }}</div>
+              <div class="plotly-wrap">{{ chart_sku_delta_html | safe }}</div>
+            {% else %}
+              <div class="text-muted small">해당 SKU의 히스토리가 부족합니다. 다른 날짜로 데이터를 더 업로드하면 표시됩니다.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Bootstrap 툴팁 초기화
+    document.addEventListener('DOMContentLoaded', function () {
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+    });
+
+    // 시즌 전체선택
+    function selectAllSeasons() {
+      const checkboxes = document.querySelectorAll('.season-checkbox');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+      });
+    }
+
+    // 시즌 전체해제
+    function deselectAllSeasons() {
+      const checkboxes = document.querySelectorAll('.season-checkbox');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+      });
+    }
+  </script>
+{% endblock %}

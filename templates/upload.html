@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="container" style="max-width: 900px;">
+    <!-- 업로드 실패 목록 다운로드 영역 -->
+    {% if session.get('failed_count') and session.get('failed_count') > 0 %}
+    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center gap-3 mb-3" role="alert" style="border-left: 4px solid #f59e0b;">
+      <div class="flex-shrink-0">
+        <i class="bi bi-exclamation-triangle-fill fs-4" style="color: #f59e0b;"></i>
+      </div>
+      <div class="flex-grow-1">
+        <h6 class="alert-heading mb-1">
+          <i class="bi bi-file-earmark-excel"></i> 이전 업로드 실패 항목
+        </h6>
+        <p class="mb-0">
+          <strong>{{ "{:,}".format(session.get('failed_count')) }}개 항목</strong>이 업로드되지 못했습니다.
+        </p>
+      </div>
+      <div class="flex-shrink-0">
+        <a href="{{ url_for('download_failed') }}" class="btn btn-warning btn-sm">
+          <i class="bi bi-download"></i> 다운로드
+        </a>
+      </div>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="d-flex align-items-end justify-content-between mb-4">
+      <div>
+        <h2 class="h5 fw-semibold mb-1">📊 재고 데이터 업로드</h2>
+        <div class="text-muted small">최대 4개 파일을 선택하고 한 번에 업로드하세요</div>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('upload_post') }}" enctype="multipart/form-data">
+      
+      <!-- 날짜 선택 -->
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body p-4">
+          <label class="form-label fw-semibold">📅 데이터 기준일</label>
+          <input class="form-control form-control-lg" type="date" name="snapshot_date" value="{{ default_date }}" required />
+          <div class="form-text">모든 파일이 이 날짜로 저장됩니다</div>
+        </div>
+      </div>
+
+      <!-- 1. 상품분석판매 -->
+      <div class="card shadow-sm border-primary border-2 mb-3">
+        <div class="card-header bg-primary text-white">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-cart-check-fill"></i>
+            <strong>1. 상품분석판매 데이터</strong> (필수)
+          </h3>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-info mb-3">
+            <strong>📁 파일 형식:</strong> CSV (.csv)<br>
+            <strong>📋 포함 내용:</strong> 상품명, 옵션, 현재재고, 판매수량<br>
+            <strong>🎯 결과:</strong> SKU 생성 + 판매량 분석
+          </div>
+          
+          <label class="form-label fw-semibold">CSV 파일 선택 <span class="text-danger">*</span></label>
+          <input class="form-control form-control-lg" type="file" name="sales_file" accept=".csv" required />
+          <div class="form-text">예: 20260129_091301_ProductPrdchart.csv</div>
+        </div>
+      </div>
+
+      <!-- 2. 물류센터1 재고 -->
+      <div class="card shadow-sm border-success border-2 mb-3">
+        <div class="card-header bg-success text-white">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-box-seam-fill"></i>
+            <strong>2. 물류센터1 재고 데이터</strong> (선택)
+          </h3>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-warning mb-3">
+            <strong>📁 파일 형식:</strong> Excel (.xlsx, .xls, .xlsb)<br>
+            <strong>📋 포함 내용:</strong> 상품(SKU), 솔리드가용재고, 아소트가용재고<br>
+            <strong>🎯 결과:</strong> 물류센터1 재고 추가 (SKU 매칭)
+          </div>
+          
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Excel 파일 선택 (선택사항)</label>
+              <input class="form-control form-control-lg" type="file" name="warehouse_file" accept=".xlsx,.xls,.xlsb" />
+              <div class="form-text">예: test0129_center1.xlsx</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">시트명 (선택)</label>
+              <input class="form-control form-control-lg" type="text" name="warehouse_sheet" placeholder="첫 시트" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 물류센터2 재고 -->
+      <div class="card shadow-sm border-info border-2 mb-3">
+        <div class="card-header bg-info text-white">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-box-seam-fill"></i>
+            <strong>3. 물류센터2 재고 데이터</strong> (선택)
+          </h3>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-warning mb-3">
+            <strong>📁 파일 형식:</strong> Excel (.xlsx, .xls, .xlsb)<br>
+            <strong>📋 포함 내용:</strong> 상품(SKU), 솔리드가용재고, 아소트가용재고<br>
+            <strong>🎯 결과:</strong> 물류센터2 재고 추가 (SKU 매칭)
+          </div>
+          
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Excel 파일 선택 (선택사항)</label>
+              <input class="form-control form-control-lg" type="file" name="warehouse_file2" accept=".xlsx,.xls,.xlsb" />
+              <div class="form-text">예: test0129_center2.xlsx</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">시트명 (선택)</label>
+              <input class="form-control form-control-lg" type="text" name="warehouse2_sheet" placeholder="첫 시트" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 매장 재고 -->
+      <div class="card shadow-sm border-warning border-2 mb-4">
+        <div class="card-header bg-warning text-dark">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-shop-window"></i>
+            <strong>4. 매장 재고 데이터</strong> (선택)
+          </h3>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-warning mb-3">
+            <strong>📁 파일 형식:</strong> Excel (.xlsx, .xls, .xlsb)<br>
+            <strong>📋 포함 내용:</strong> 상품코드(SKU), 가용재고<br>
+            <strong>🎯 결과:</strong> 매장 가용재고 추가 (SKU 매칭)
+          </div>
+          
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Excel 파일 선택 (선택사항)</label>
+              <input class="form-control form-control-lg" type="file" name="channel_file" accept=".xlsx,.xls,.xlsb" />
+              <div class="form-text">예: T009_10_CHANNEL_AVAILABLE_STOCK_20260203105740.xlsx</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">시트명 (선택)</label>
+              <input class="form-control form-control-lg" type="text" name="channel_sheet" placeholder="첫 시트" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 업로드 버튼 -->
+      <div class="d-grid gap-2">
+        <button class="btn btn-primary btn-lg" type="submit">
+          <i class="bi bi-cloud-upload-fill"></i> 
+          <strong>📤 한 번에 업로드</strong>
+        </button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('dashboard') }}">취소</a>
+      </div>
+    </form>
+
+    <!-- 사용 안내 -->
+    <div class="card shadow-sm bg-light border-0 mt-4">
+      <div class="card-body p-4">
+        <h3 class="h6 fw-semibold mb-3">📌 사용 가이드</h3>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="d-flex">
+              <div class="flex-shrink-0">
+                <span class="badge bg-primary rounded-circle" style="width: 24px; height: 24px; line-height: 24px;">1</span>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <strong>상품분석판매 (필수)</strong>
+                <p class="text-muted small mb-0">CSV 파일을 선택하세요. SKU가 생성되고 판매량과 현재재고가 저장됩니다.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="d-flex">
+              <div class="flex-shrink-0">
+                <span class="badge bg-success rounded-circle" style="width: 24px; height: 24px; line-height: 24px;">2</span>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <strong>물류센터1 (선택)</strong>
+                <p class="text-muted small mb-0">Excel 파일을 선택하면 물류센터1 재고를 추가합니다.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="d-flex">
+              <div class="flex-shrink-0">
+                <span class="badge bg-info rounded-circle" style="width: 24px; height: 24px; line-height: 24px;">3</span>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <strong>물류센터2 (선택)</strong>
+                <p class="text-muted small mb-0">Excel 파일을 선택하면 물류센터2 재고를 추가합니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr class="my-3">
+        <div class="text-muted small">
+          <strong>💡 팁:</strong><br>
+          • 물류재고는 선택사항입니다. 나중에 따로 업로드할 수도 있습니다.<br>
+          • 물류재고 = 물류센터1 + 물류센터2 (자동 합계)<br>
+          • 같은 날짜로 다시 업로드하면 데이터가 업데이트됩니다.<br>
+          • 실가용재고 = 현재재고 + 물류재고 (센터1 + 센터2)
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,150 @@
+:root {
+  --soft-bg: #0b1220;
+}
+
+.bg-soft {
+  background: radial-gradient(1200px 600px at 10% 10%, rgba(59,130,246,0.16), transparent 55%),
+              radial-gradient(900px 500px at 90% 20%, rgba(168,85,247,0.14), transparent 60%),
+              #0b1220;
+  min-height: 100vh;
+}
+
+.navbar {
+  backdrop-filter: blur(8px);
+}
+
+.card {
+  border-radius: 14px;
+}
+
+.kpi .h4 {
+  letter-spacing: -0.02em;
+}
+
+/* 세련된 KPI 카드 */
+.kpi-card {
+  border-radius: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+.kpi-card .h4 {
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+}
+
+.kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.kpi-danger {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.05) 0%, rgba(220, 38, 38, 0.02) 100%);
+  border-left: 4px solid #dc2626 !important;
+}
+
+.kpi-warning {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);
+  border-left: 4px solid #3b82f6 !important;
+}
+
+.kpi-success {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, rgba(34, 197, 94, 0.02) 100%);
+  border-left: 4px solid #22c55e !important;
+}
+
+.kpi-success .text-success {
+  color: #15803d !important;  /* 더 진한 녹색으로 변경 */
+}
+
+.kpi-success .h4.text-success {
+  color: #166534 !important;  /* 숫자는 더욱 진한 녹색 */
+}
+
+.plotly-wrap .plotly-graph-div {
+  margin: 0 auto;
+}
+
+tr.row-oos td {
+  background: rgba(239, 68, 68, 0.15);  /* 긴급필업: 빨강 */
+}
+tr.row-low td {
+  background: rgba(245, 158, 11, 0.12);  /* 필업필요: 주황 */
+}
+tr.row-check td {
+  background: rgba(59, 130, 246, 0.10);  /* 체크필요: 파랑 */
+}
+tr.row-reorder td {
+  background: rgba(107, 114, 128, 0.08);  /* 필업검토: 회색 */
+}
+
+.table thead th {
+  font-size: 0.85rem;
+  color: rgba(15, 23, 42, 0.75);
+  background-color: #f8f9fa;
+}
+
+.table-responsive {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+.table-responsive::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+code {
+  background: rgba(148, 163, 184, 0.18);
+  padding: 0.15rem 0.35rem;
+  border-radius: 8px;
+}
+
+/* 정렬 가능한 테이블 헤더 */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.sortable:hover {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+
+.sortable:active {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.sortable:hover .sort-icon {
+  opacity: 1;
+}
+
