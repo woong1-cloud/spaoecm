@@ -130,9 +130,7 @@ streamlit run app.py
 - **데이터 초기화** 메뉴/기능 비노출 · 접근 시 404 (실수로 전체 삭제 방지)
 - **/test** 경로 비노출 (외부에서 서버 탐지 방지)
 - **500 에러** 시 상세 traceback 미표시 (보안)
-- **debug** 자동 해제
-
-**실행 방법 (Windows):**
+- **debug** 자동 해제**실행 방법 (Windows):**
 
 ```cmd
 set DEPLOY_MODE=1

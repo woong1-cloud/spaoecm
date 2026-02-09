@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Database (런타임 데이터)
+inventory.db
+inventory.db-shm
+inventory.db-wal
+
+# 업로드 실패 임시 파일
+failed_upload_*.csv
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

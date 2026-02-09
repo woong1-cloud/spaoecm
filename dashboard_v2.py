@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+from collections import defaultdict
 from functools import wraps
 from typing import Any, Callable, Optional
 
@@ -661,6 +662,42 @@ def _dashboard_impl():
             "rate": cat_rate
         })
     
+    # 시즌별 결품률 계산 (2자리 코드 F1, G1 등 + 첫글자 그룹)
+    season_stockout_stats = []
+    for sc in sorted(all_data["season_code"].dropna().unique()):
+        sc_str = str(sc).strip()
+        if not sc_str or len(sc_str) < 2:
+            continue
+        sc_data = all_data[all_data["season_code"] == sc]
+        sc_total = len(sc_data)
+        sc_stockout = int((sc_data["stock"] == 0).sum())
+        sc_rate = round((sc_stockout / sc_total * 100), 1) if sc_total > 0 else 0.0
+        season_stockout_stats.append({
+            "code": sc_str,
+            "total": sc_total,
+            "stockout": sc_stockout,
+            "rate": sc_rate,
+            "letter": sc_str[0].upper(),
+        })
+    
+    season_groups = defaultdict(list)
+    for s in season_stockout_stats:
+        season_groups[s["letter"]].append(s)
+    
+    season_group_stats = []
+    for letter in sorted(season_groups.keys()):
+        seasons = season_groups[letter]
+        group_total = sum(se["total"] for se in seasons)
+        group_stockout = sum(se["stockout"] for se in seasons)
+        group_rate = round((group_stockout / group_total * 100), 1) if group_total > 0 else 0.0
+        season_group_stats.append({
+            "letter": letter,
+            "total": group_total,
+            "stockout": group_stockout,
+            "rate": group_rate,
+            "seasons": sorted(seasons, key=lambda x: x["code"]),
+        })
+    
     # 전체 데이터 기준 긴급주의 써머리 (상위 30개, 복종별 필터 적용)
     high_risk_all = all_data[
         (all_data["daily_sales_7d"] > 0) & 
@@ -695,9 +732,7 @@ def _dashboard_impl():
     #     "SPPP, G23" → SPPP OR G23
     #     "SPPP G11, G23 U0" → (SPPP AND G11) OR (G23 AND U0)
     if q:
-        import pandas as pd
-        
-        # 쉼표로 OR 그룹 분리
+        # 쉼표로 OR 그룹 분리 (pd는 모듈 상단에서 import됨)
         or_groups = [g.strip() for g in q.split(',') if g.strip()]
         final_mask = pd.Series([False] * len(view), index=view.index)
         
@@ -747,6 +782,9 @@ def _dashboard_impl():
     filtered_items = int(view["sku"].nunique())
     filtered_stockout_count = int((view["stock"] == 0).sum())
     filtered_stockout_rate = round((filtered_stockout_count / filtered_items * 100), 1) if filtered_items > 0 else 0.0
+    # 물류가용재고가 있는 품목 수 (warehouse_stock > 0) 및 비율
+    filtered_warehouse_available_count = int((view["warehouse_stock"] > 0).sum())
+    filtered_warehouse_available_pct = round((filtered_warehouse_available_count / filtered_items * 100), 1) if filtered_items > 0 else 0.0
     
     # 전체 테이블: 판매량 높은 순으로 정렬
     table_columns = [
@@ -803,6 +841,8 @@ def _dashboard_impl():
         "total_items": filtered_items,
         "stockout_count": filtered_stockout_count,
         "stockout_rate": filtered_stockout_rate,
+        "warehouse_available_count": filtered_warehouse_available_count,
+        "warehouse_available_pct": filtered_warehouse_available_pct,
     }
     
     return render_template(
@@ -812,6 +852,7 @@ def _dashboard_impl():
         kpi=kpi_all,  # 전체 KPI (상단)
         kpi_filtered=kpi_filtered,  # 필터링된 KPI (필터 하단)
         category_stockout_stats=category_stockout_stats,  # 복종별 결품률
+        season_group_stats=season_group_stats,  # 시즌별 결품률 (첫글자 그룹 + 2자리 시즌)
         categories=categories,
         season_codes=season_codes,  # 시즌 코드 목록
         urgent_categories=urgent_categories,  # 긴급주의 복종 코드 목록
