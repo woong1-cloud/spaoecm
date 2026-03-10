@@ -7,23 +7,29 @@ from __future__ import annotations
 import datetime as dt
 import io
 import os
+import traceback
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from inventory_core import (
-    compute_daily_change,
-    get_conn,
-    load_history,
-    load_latest,
-    normalize_excel,
-    update_channel_stock,
-    update_distribution_note,
-    update_warehouse_stock,
-    upsert_snapshot,
-)
+# import 실패 시 오류 메시지 표시용 (Streamlit Cloud 디버깅)
+_import_error = None
+try:
+    from inventory_core import (
+        compute_daily_change,
+        get_conn,
+        load_history,
+        load_latest,
+        normalize_excel,
+        update_channel_stock,
+        update_distribution_note,
+        update_warehouse_stock,
+        upsert_snapshot,
+    )
+except Exception as e:
+    _import_error = (e, traceback.format_exc())
 
 APP_TITLE = "재고 대시보드 V2"
 DEFAULT_PASSWORD = "1234"
@@ -436,6 +442,13 @@ def run_change_password():
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="auto")
+
+    if _import_error is not None:
+        err, tb = _import_error
+        st.error(f"모듈 로드 오류: {err}")
+        st.code(tb, language="text")
+        return
+
     init_session()
 
     if not st.session_state.logged_in:
@@ -447,7 +460,10 @@ def main():
         st.title(APP_TITLE)
         if st.button("로그아웃"):
             st.session_state.logged_in = False
-            st.rerun()
+            if hasattr(st, "rerun"):
+                st.rerun()
+            else:
+                st.experimental_rerun()
         page = st.radio(
             "메뉴",
             ["📊 대시보드", "📤 업로드", "💾 백업/내보내기", "🔑 비밀번호 변경"],
@@ -465,4 +481,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.set_page_config(page_title=APP_TITLE, layout="wide")
+        st.error(f"앱 실행 오류: {e}")
+        st.code(traceback.format_exc(), language="text")
