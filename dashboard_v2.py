@@ -35,6 +35,7 @@ from inventory_core import (
     upsert_snapshot,
     update_channel_stock,
     update_warehouse_stock,
+    update_distribution_note,
 )
 
 
@@ -335,10 +336,12 @@ def upload_post():
     warehouse_file = request.files.get("warehouse_file")
     warehouse_file2 = request.files.get("warehouse_file2")
     channel_file = request.files.get("channel_file")
+    distribution_file = request.files.get("distribution_file")
     snapshot_date = (request.form.get("snapshot_date") or "").strip()
     warehouse_sheet = (request.form.get("warehouse_sheet") or "").strip()
     warehouse2_sheet = (request.form.get("warehouse2_sheet") or "").strip()
     channel_sheet = (request.form.get("channel_sheet") or "").strip()
+    distribution_sheet = (request.form.get("distribution_sheet") or "").strip()
     
     # 필수 파일 검증
     if not sales_file or not sales_file.filename:
@@ -497,6 +500,73 @@ def upload_post():
             else:
                 flash("매장재고: Excel 파일만 지원됩니다.", "warning")
         
+        # 5. 분배내역 업로드 (선택사항)
+        distribution_count = 0
+        if distribution_file and distribution_file.filename:
+            distribution_filename = distribution_file.filename or ""
+            distribution_ext = os.path.splitext(distribution_filename)[1].lower()
+            if distribution_ext in [".xlsx", ".xls", ".xlsb"]:
+                try:
+                    dist_df = pd.read_excel(distribution_file, sheet_name=(distribution_sheet or 0))
+                    dist_df.columns = [str(c).strip() for c in dist_df.columns]
+                    # SKU 컬럼 후보: SKU, 상품코드, 상품, 품목코드
+                    sku_col = None
+                    for col in ["SKU", "상품코드", "상품", "품목코드", "sku"]:
+                        if col in dist_df.columns:
+                            sku_col = col
+                            break
+                    # 분배량 컬럼 우선 (N열 등): 분배량, 수량, N열 → 수량 합계로 표시
+                    qty_col = None
+                    for col in ["분배량", "수량", "분배수량"]:
+                        if col in dist_df.columns:
+                            qty_col = col
+                            break
+                    if not qty_col and len(dist_df.columns) >= 14:
+                        # N열 = 14번째 컬럼(인덱스 13)
+                        qty_col = dist_df.columns[13]
+                    # 텍스트 비고 컬럼 (분배량 없을 때 대체)
+                    note_col = None
+                    for col in ["분배내역", "비고", "메모", "내역", "분배요청내역", "분배요청", "비고사항"]:
+                        if col in dist_df.columns:
+                            note_col = col
+                            break
+                    use_qty = qty_col is not None
+                    use_note = note_col is not None and not use_qty
+                    if sku_col and (use_qty or use_note):
+                        sku_note_map = {}
+                        for _, row in dist_df.iterrows():
+                            sku_raw = str(row.get(sku_col, "")).strip()
+                            sku = sku_raw[:15] if len(sku_raw) >= 15 else sku_raw
+                            if not sku or sku == "nan":
+                                continue
+                            if use_qty:
+                                val = row.get(qty_col)
+                                qty = int(pd.to_numeric(val, errors="coerce")) if not pd.isna(val) else 0
+                                if sku in sku_note_map:
+                                    sku_note_map[sku] = sku_note_map[sku] + qty
+                                else:
+                                    sku_note_map[sku] = qty
+                            else:
+                                note_val = row.get(note_col)
+                                note = "" if pd.isna(note_val) else str(note_val).strip()
+                                if sku in sku_note_map:
+                                    sku_note_map[sku] = sku_note_map[sku] + " / " + note
+                                else:
+                                    sku_note_map[sku] = note
+                        if use_qty:
+                            sku_note_map = {k: str(v) for k, v in sku_note_map.items()}
+                        if sku_note_map:
+                            distribution_count = update_distribution_note(
+                                conn, date.isoformat(), sku_note_map
+                            )
+                            print(f"[INFO] 분배내역 업로드: {distribution_count}개 SKU 반영 (분배량 기준)" if use_qty else f"[INFO] 분배내역 업로드: {distribution_count}개 SKU 반영")
+                    else:
+                        flash("⚠️ 분배내역 파일에 SKU(또는 상품코드) 컬럼과 분배량(또는 N열/수량) 컬럼이 필요합니다.", "warning")
+                except Exception as ex:
+                    flash(f"⚠️ 분배내역 파일 처리 중 오류: {ex}", "warning")
+            else:
+                flash("분배내역: Excel 파일만 지원됩니다.", "warning")
+        
         # 결과 메시지
         total_warehouse_count = warehouse1_count + warehouse2_count
         msg_parts = [f"상품분석판매: {sales_count}개 품목"]
@@ -506,6 +576,8 @@ def upload_post():
             msg_parts.append(f"물류센터2: {warehouse2_count}개 SKU")
         if channel_count > 0:
             msg_parts.append(f"매장재고: {channel_count}개 SKU")
+        if distribution_count > 0:
+            msg_parts.append(f"분배내역: {distribution_count}개 SKU")
         
         success_msg = f"✅ {', '.join(msg_parts)} 업로드 완료 (날짜: {date})"
         flash(success_msg, "success")
@@ -574,6 +646,7 @@ def _dashboard_impl():
     low_only = (request.args.get("low_only") or "0").strip() == "1"
     warehouse_only = (request.args.get("warehouse_only") or "0").strip() == "1"
     channel_only = (request.args.get("channel_only") or "0").strip() == "1"  # 매장재고 필터
+    distribution_only = (request.args.get("distribution_only") or "0").strip() == "1"  # 분배내역 있음
     warehouse_center = (request.args.get("warehouse_center") or "전체").strip()
     season_codes_selected = request.args.getlist("season_code")  # 다중 시즌 코드 필터
     urgent_category = (request.args.get("urgent_category") or "(전체)").strip()  # 긴급주의 복종 필터
@@ -588,6 +661,9 @@ def _dashboard_impl():
                 "min_stock", "lead_time_days", "safety_stock"):
         if col not in all_data.columns:
             all_data[col] = 0
+    if "distribution_note" not in all_data.columns:
+        all_data["distribution_note"] = ""
+    all_data["distribution_note"] = all_data["distribution_note"].fillna("").astype(str)
     
     all_data["category"] = all_data["category"].fillna("")
     
@@ -647,6 +723,15 @@ def _dashboard_impl():
     total_warehouse_stock_all = int(all_data["warehouse_stock"].sum())
     stockout_count_all = int((all_data["stock"] == 0).sum())
     stockout_rate_all = round((stockout_count_all / total_items_all * 100), 1) if total_items_all > 0 else 0.0
+    
+    # 분배내역 KPI (품목수: 분배내역 있는 행 수, 전체수량: 분배내역 값 중 숫자 합계)
+    dist_note_filled = all_data["distribution_note"].fillna("").astype(str).str.strip() != ""
+    distribution_items_all = int(dist_note_filled.sum())
+    distribution_total_qty_all = 0
+    for v in all_data.loc[dist_note_filled, "distribution_note"]:
+        n = pd.to_numeric(str(v).strip(), errors="coerce")
+        if pd.notna(n):
+            distribution_total_qty_all += int(n)
     
     # 복종별 결품률 계산
     category_stockout_stats = []
@@ -769,6 +854,9 @@ def _dashboard_impl():
     if channel_only:
         view = view[view["channel_stock"] > 0]
     
+    if distribution_only:
+        view = view[view["distribution_note"].fillna("").astype(str).str.strip() != ""]
+    
     # 물류센터별 필터링
     if warehouse_center == "센터1":
         view = view[view["warehouse1_stock"] > 0]
@@ -786,11 +874,11 @@ def _dashboard_impl():
     filtered_warehouse_available_count = int((view["warehouse_stock"] > 0).sum())
     filtered_warehouse_available_pct = round((filtered_warehouse_available_count / filtered_items * 100), 1) if filtered_items > 0 else 0.0
     
-    # 전체 테이블: 판매량 높은 순으로 정렬
+    # 전체 테이블: 판매량 높은 순으로 정렬 (필업제안 ↔ 분배가능 사이에 분배내역)
     table_columns = [
         "status", "product_code", "sku", "name", "category", "stock", "channel_stock",
         "warehouse1_stock", "warehouse2_stock", "warehouse_stock",
-        "daily_sales_7d", "days_until_out", "suggested_order_qty",
+        "daily_sales_7d", "days_until_out", "suggested_order_qty", "distribution_note",
         "min_stock", "reorder_point", "avg_daily_usage_est",
         "lead_time_days", "safety_stock",
     ]
@@ -834,6 +922,8 @@ def _dashboard_impl():
         "total_warehouse_stock": total_warehouse_stock_all,
         "stockout_count": stockout_count_all,
         "stockout_rate": stockout_rate_all,
+        "distribution_items": distribution_items_all,
+        "distribution_total_qty": distribution_total_qty_all,
     }
     
     # 필터링된 KPI (필터 영역 하단용)
@@ -862,6 +952,7 @@ def _dashboard_impl():
             "low_only": low_only,
             "warehouse_only": warehouse_only,
             "channel_only": channel_only,
+            "distribution_only": distribution_only,
             "warehouse_center": warehouse_center,
             "season_codes": season_codes_selected,  # 다중 시즌 코드 필터
             "urgent_category": urgent_category,  # 긴급주의 복종 필터
