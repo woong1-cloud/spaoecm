@@ -65,6 +65,11 @@ streamlit run app.py
 2. **Main file path**를 반드시 `app.py`로 지정 (Flask용 `dashboard_v2.py`가 아닌 Streamlit용 `app.py`)
 3. 필요 시 환경 변수: `DEPLOY_MODE=1` (데이터 초기화 비노출은 앱 내 메뉴로 제한)
 
+### Flask 버전 UI 그대로 배포 (Railway 등)
+
+**dashboard_v2.py(Flask)** 를 UI 수정 없이 배포하려면 **[DEPLOY_FLASK.md](DEPLOY_FLASK.md)** 의 단계별 가이드를 따르세요.  
+(Railway 무료/유료 요약 포함)
+
 ## 3) 엑셀 데이터 형식
 
 ### 상품분석판매 (CSV)
