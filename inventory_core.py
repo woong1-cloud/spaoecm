@@ -72,6 +72,20 @@ def get_conn(db_path: str = DB_PATH) -> sqlite3.Connection:
     except Exception as e:
         pass  # 이미 존재하거나 다른 이유로 실패하면 무시
     
+    # 옴니판매불가 SKU 테이블
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS omni_blocked (
+            snapshot_date TEXT NOT NULL,
+            style_code TEXT NOT NULL,
+            sku_code TEXT NOT NULL,
+            blocked_qty INTEGER NOT NULL,
+            top_store TEXT,
+            PRIMARY KEY (snapshot_date, style_code, sku_code)
+        )
+        """
+    )
+    
     # settings 테이블 (비밀번호 저장용)
     conn.execute(
         """

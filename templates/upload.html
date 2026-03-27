@@ -151,7 +151,7 @@
       </div>
 
       <!-- 5. 분배내역 -->
-      <div class="card shadow-sm border-secondary border-2 mb-4">
+      <div class="card shadow-sm border-secondary border-2 mb-3">
         <div class="card-header bg-secondary text-white">
           <h3 class="h6 mb-0">
             <i class="bi bi-truck"></i>
@@ -174,6 +174,35 @@
             <div class="col-md-4">
               <label class="form-label fw-semibold">시트명 (선택)</label>
               <input class="form-control form-control-lg" type="text" name="distribution_sheet" placeholder="첫 시트" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 옴니판매불가 SKU -->
+      <div class="card shadow-sm border-danger border-2 mb-4">
+        <div class="card-header bg-danger text-white">
+          <h3 class="h6 mb-0">
+            <i class="bi bi-slash-circle"></i>
+            <strong>6. 옴니판매불가 SKU</strong> (선택)
+          </h3>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-danger mb-3">
+            <strong>📁 파일 형식:</strong> Excel (.xlsx, .xls, .xlsb)<br>
+            <strong>📋 열 구성(기본 가정):</strong> C열=매장명, D열=스타일코드, E열=단품코드(SKU), H열=판매불가 수량<br>
+            <strong>🎯 결과:</strong> 대시보드 하단 <em>옴니판매불가 SKU</em> 섹션에 스코어보드·상세 테이블로 표시
+          </div>
+          
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">옴니판매불가 Excel 파일 선택 (선택사항)</label>
+              <input class="form-control form-control-lg" type="file" name="omni_file" accept=".xlsx,.xls,.xlsb" />
+              <div class="form-text">예: 옴니채널불가상품_YYYYMMDDHHMMSS.xls(x)</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">시트명 (선택)</label>
+              <input class="form-control form-control-lg" type="text" name="omni_sheet" placeholder="첫 시트" />
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 """
-재고 대시보드 V2 - 오류 수정 및 최적화 버전
-포트: 5003
+재고 대시보드 V3 (Flask, 진입 파일명 dashboard_v2.py 유지)
+포트(로컬): 5003
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from inventory_core import (
 )
 
 
-APP_TITLE = "재고 대시보드 V2"
+APP_TITLE = "재고 대시보드 V3"
 DEFAULT_PASSWORD = "1234"
 
 # 팀 배포 모드: True면 초기화 기능 비활성화, /test 비노출, 500 에러 시 상세 미표시
@@ -93,7 +93,7 @@ def test():
     """서버 상태 확인 (배포 모드에서는 비노출)"""
     if DEPLOY_MODE:
         abort(404)
-    return "<h1>OK</h1><p>✅ 대시보드 V2 서버 정상 작동중 (포트: 5003)</p>"
+    return "<h1>OK</h1><p>✅ 대시보드 V3 서버 정상 작동중 (포트: 5003)</p>"
 
 
 def _get_password_from_db() -> str:
@@ -337,11 +337,13 @@ def upload_post():
     warehouse_file2 = request.files.get("warehouse_file2")
     channel_file = request.files.get("channel_file")
     distribution_file = request.files.get("distribution_file")
+    omni_file = request.files.get("omni_file")
     snapshot_date = (request.form.get("snapshot_date") or "").strip()
     warehouse_sheet = (request.form.get("warehouse_sheet") or "").strip()
     warehouse2_sheet = (request.form.get("warehouse2_sheet") or "").strip()
     channel_sheet = (request.form.get("channel_sheet") or "").strip()
     distribution_sheet = (request.form.get("distribution_sheet") or "").strip()
+    omni_sheet = (request.form.get("omni_sheet") or "").strip()
     
     # 필수 파일 검증
     if not sales_file or not sales_file.filename:
@@ -567,6 +569,114 @@ def upload_post():
             else:
                 flash("분배내역: Excel 파일만 지원됩니다.", "warning")
         
+        # 6. 옴니판매불가 SKU 업로드 (선택사항)
+        omni_count = 0
+        if omni_file and omni_file.filename:
+            omni_filename = omni_file.filename or ""
+            omni_ext = os.path.splitext(omni_filename)[1].lower()
+            if omni_ext in [".xlsx", ".xls", ".xlsb"]:
+                try:
+                    sheet = omni_sheet or 0
+                    read_kwargs = {"sheet_name": sheet}
+                    if omni_ext == ".xls":
+                        try:
+                            import xlrd  # noqa: F401
+                            read_kwargs["engine"] = "xlrd"
+                        except ImportError:
+                            raise ImportError(
+                                "옴니판매불가 .xls 파일을 읽으려면 xlrd 패키지가 필요합니다. "
+                                "pip install xlrd 후 다시 시도하거나, 엑셀에서 .xlsx 형식으로 저장해 주세요."
+                            )
+                    omni_df = pd.read_excel(omni_file, **read_kwargs)
+                    
+                    if omni_df.shape[1] < 8:
+                        flash("⚠️ 옴니판매불가 파일에 필요한 열(C,D,E,H)이 부족합니다.", "warning")
+                    else:
+                        df = omni_df.copy()
+                        # C열=매장명, D열=스타일코드, E열=단품코드, H열=판매불가 수량
+                        store_col = df.columns[2]
+                        style_col = df.columns[3]
+                        sku_col = df.columns[4]
+                        blocked_col = df.columns[7]
+                        
+                        df["store_name"] = df[store_col].astype(str).str.strip()
+                        df["style_code"] = df[style_col].astype(str).str.strip()
+                        df["sku_code"] = df[sku_col].astype(str).str.strip()
+                        df["blocked_qty"] = (
+                            pd.to_numeric(df[blocked_col], errors="coerce")
+                            .fillna(0)
+                            .astype(int)
+                        )
+                        
+                        df = df[
+                            (df["style_code"] != "")
+                            & (df["sku_code"] != "")
+                            & (df["blocked_qty"] > 0)
+                        ].copy()
+                        
+                        if df.empty:
+                            flash("⚠️ 옴니판매불가 파일에서 유효한 데이터를 찾을 수 없습니다.", "warning")
+                        else:
+                            # 스타일/단품별 판매불가 수량 합계
+                            summary = (
+                                df.groupby(["style_code", "sku_code"], as_index=False)["blocked_qty"]
+                                .sum()
+                            )
+                            
+                            # 스타일/단품/매장별 합계 후, 각 쌍에서 가장 큰 매장 선택
+                            store_agg = (
+                                df.groupby(
+                                    ["style_code", "sku_code", "store_name"], as_index=False
+                                )["blocked_qty"]
+                                .sum()
+                            )
+                            store_agg = store_agg.sort_values(
+                                ["style_code", "sku_code", "blocked_qty"],
+                                ascending=[True, True, False],
+                            )
+                            top_store_df = store_agg.drop_duplicates(
+                                subset=["style_code", "sku_code"], keep="first"
+                            ).rename(
+                                columns={"store_name": "top_store"}
+                            )
+                            
+                            omni_join = summary.merge(
+                                top_store_df[["style_code", "sku_code", "top_store"]],
+                                on=["style_code", "sku_code"],
+                                how="left",
+                            )
+                            
+                            # 기존 데이터 삭제 후 삽입
+                            conn.execute(
+                                "DELETE FROM omni_blocked WHERE snapshot_date = ?",
+                                (date.isoformat(),),
+                            )
+                            rows = [
+                                (
+                                    date.isoformat(),
+                                    str(r["style_code"]),
+                                    str(r["sku_code"]),
+                                    int(r["blocked_qty"]),
+                                    str(r.get("top_store") or ""),
+                                )
+                                for _, r in omni_join.iterrows()
+                            ]
+                            conn.executemany(
+                                """
+                                INSERT INTO omni_blocked (
+                                    snapshot_date, style_code, sku_code, blocked_qty, top_store
+                                ) VALUES (?, ?, ?, ?, ?)
+                                """,
+                                rows,
+                            )
+                            conn.commit()
+                            omni_count = len(rows)
+                            print(f"[INFO] 옴니판매불가 업로드: {omni_count}개 단품")
+                except Exception as ex:
+                    flash(f"⚠️ 옴니판매불가 파일 처리 중 오류: {ex}", "warning")
+            else:
+                flash("옴니판매불가: Excel 파일만 지원됩니다.", "warning")
+        
         # 결과 메시지
         total_warehouse_count = warehouse1_count + warehouse2_count
         msg_parts = [f"상품분석판매: {sales_count}개 품목"]
@@ -578,6 +688,8 @@ def upload_post():
             msg_parts.append(f"매장재고: {channel_count}개 SKU")
         if distribution_count > 0:
             msg_parts.append(f"분배내역: {distribution_count}개 SKU")
+        if 'omni_count' in locals() and omni_count > 0:
+            msg_parts.append(f"옴니판매불가: {omni_count}개 단품")
         
         success_msg = f"✅ {', '.join(msg_parts)} 업로드 완료 (날짜: {date})"
         flash(success_msg, "success")
@@ -627,6 +739,208 @@ def dashboard():
             + "</pre>",
             500,
         )
+
+
+def _item_code_from_sku(sku) -> str:
+    """스타일코드 10자리(=SKU 앞 10자) 기준 3·4번째 문자 → 예: SPJPG11C24 → JP"""
+    s = str(sku).strip()
+    if len(s) < 4:
+        return ""
+    return s[2:4].upper()
+
+
+def _build_item_inventory_summary(
+    conn,
+    latest_date: str,
+    latest_df: pd.DataFrame,
+    selected_season_codes: list[str],
+) -> tuple[list[dict], Optional[str], bool]:
+    """
+    최신 스냅샷 기준 아이템별 총재고·총판매량·판매량 비중, 직전 스냅샷 대비 재고 증감.
+    Returns: (rows, prev_date or None, has_prev)
+    """
+    dates_df = pd.read_sql_query(
+        """
+        SELECT DISTINCT snapshot_date AS d
+        FROM snapshots
+        ORDER BY snapshot_date DESC
+        LIMIT 2
+        """,
+        conn,
+    )
+    if dates_df.empty:
+        return [], None, False
+    prev_date: Optional[str] = None
+    if len(dates_df) >= 2:
+        prev_date = str(dates_df.iloc[1]["d"])
+    has_prev = prev_date is not None
+
+    season_focus = [str(s).strip().upper() for s in (selected_season_codes or []) if str(s).strip()]
+    season_focus = [s for s in season_focus if s in ("G1", "G2")]
+    if not season_focus:
+        season_focus = ["G1", "G2"]
+
+    def prep_work(df: pd.DataFrame) -> pd.DataFrame:
+        work = df.copy()
+        if work.empty:
+            return pd.DataFrame(
+                columns=["item_code", "sku", "stock", "sales_qty", "season_code", "is_oos", "name"]
+            )
+        work["item_code"] = work["sku"].map(_item_code_from_sku)
+        work = work[work["item_code"] != ""]
+        if "sales_qty" not in work.columns:
+            work["sales_qty"] = 0
+        work["sales_qty"] = pd.to_numeric(work["sales_qty"], errors="coerce").fillna(0)
+        work["stock"] = pd.to_numeric(work["stock"], errors="coerce").fillna(0)
+        if "name" not in work.columns:
+            work["name"] = ""
+        work["name"] = work["name"].fillna("").astype(str)
+        work["sku"] = work["sku"].astype(str)
+        work["season_code"] = work["sku"].str[4:6].str.upper()
+        work["is_oos"] = (work["stock"] <= 0).astype(int)
+        return work
+
+    def agg_items(df: pd.DataFrame) -> pd.DataFrame:
+        work = prep_work(df)
+        if work.empty:
+            return pd.DataFrame(
+                columns=["item_code", "total_stock", "total_sales", "sku_total", "sku_oos", "oos_rate"]
+            )
+        g = work.groupby("item_code", as_index=False).agg(
+            total_stock=("stock", "sum"),
+            total_sales=("sales_qty", "sum"),
+            sku_total=("sku", "nunique"),
+            sku_oos=("is_oos", "sum"),
+        )
+        g["oos_rate"] = (
+            (g["sku_oos"] / g["sku_total"] * 100.0).fillna(0).round(1)
+            if not g.empty
+            else 0.0
+        )
+        return g
+
+    cur_agg = agg_items(latest_df)
+    if cur_agg.empty:
+        return [], prev_date, has_prev
+
+    total_sales_all = float(cur_agg["total_sales"].sum())
+    cur_agg["sales_share_pct"] = 0.0
+    if total_sales_all > 0:
+        cur_agg["sales_share_pct"] = (cur_agg["total_sales"] / total_sales_all * 100.0).round(2)
+
+    if has_prev and prev_date:
+        prev_df = pd.read_sql_query(
+            "SELECT sku, stock, sales_qty FROM snapshots WHERE snapshot_date = ?",
+            conn,
+            params=(prev_date,),
+        )
+        prev_agg = agg_items(prev_df).rename(
+            columns={"total_stock": "stock_prev", "total_sales": "sales_prev"}
+        )
+        merged = cur_agg.merge(prev_agg[["item_code", "stock_prev"]], on="item_code", how="left")
+        merged["stock_prev"] = merged["stock_prev"].fillna(0)
+        merged["stock_prev"] = merged["stock_prev"].astype(int)
+        merged["stock_delta"] = merged["total_stock"].astype(int) - merged["stock_prev"].astype(int)
+    else:
+        merged = cur_agg.copy()
+        merged["stock_prev"] = pd.NA
+        merged["stock_delta"] = pd.NA
+
+    if has_prev:
+        merged["_abs_delta"] = merged["stock_delta"].abs()
+        merged = merged.sort_values(["_abs_delta", "total_stock"], ascending=[False, False])
+        merged = merged.drop(columns=["_abs_delta"])
+    else:
+        merged = merged.sort_values("total_stock", ascending=False)
+
+    # 아이템별 시즌 결품률(top4): 시즌 필터의 G1/G2 대상만 집계
+    latest_work = prep_work(latest_df)
+    season_top_map: dict[str, list[dict]] = {}
+    item_oos_top20_map: dict[str, list[dict]] = {}
+    item_imminent_top20_map: dict[str, list[dict]] = {}
+    if not latest_work.empty:
+        season_work = latest_work[latest_work["season_code"].isin(season_focus)].copy()
+        if not season_work.empty:
+            season_stat = (
+                season_work.groupby(["item_code", "season_code"], as_index=False)
+                .agg(total=("sku", "nunique"), stockout=("is_oos", "sum"))
+            )
+            season_stat["rate"] = (season_stat["stockout"] / season_stat["total"] * 100.0).fillna(0).round(1)
+            season_stat = season_stat.sort_values(["item_code", "rate", "stockout", "total"], ascending=[True, False, False, False])
+            for item_code, grp in season_stat.groupby("item_code"):
+                top = grp.head(4)
+                season_top_map[str(item_code)] = [
+                    {
+                        "code": str(rr["season_code"]),
+                        "rate": float(rr["rate"]),
+                        "stockout": int(rr["stockout"]),
+                        "total": int(rr["total"]),
+                    }
+                    for _, rr in top.iterrows()
+                ]
+
+        # 아이템 기준 결품 SKU Top20: 재고<=0, 판매량 높은 순
+        oos_candidates = latest_work[latest_work["is_oos"] == 1].copy()
+        if not oos_candidates.empty:
+            oos_candidates = oos_candidates.sort_values(
+                ["item_code", "sales_qty", "sku"], ascending=[True, False, True]
+            )
+            for item_code, grp in oos_candidates.groupby("item_code"):
+                top20 = grp.head(20)
+                item_oos_top20_map[str(item_code)] = [
+                    {
+                        "sku": str(rr["sku"]),
+                        "name": str(rr.get("name") or ""),
+                        "sales_qty": int(rr.get("sales_qty") or 0),
+                        "stock": int(rr.get("stock") or 0),
+                        "season_code": str(rr.get("season_code") or ""),
+                    }
+                    for _, rr in top20.iterrows()
+                ]
+
+        # 결품임박 Top20: 재고>0 이고 판매량>0, (재고÷일판매) 낮은 순 = 빨리 소진
+        im = latest_work[(latest_work["stock"] > 0) & (latest_work["sales_qty"] > 0)].copy()
+        if not im.empty:
+            daily = im["sales_qty"].astype(float) / 7.0
+            im = im.assign(_daily=daily)
+            im["_cover"] = im["stock"].astype(float) / im["_daily"].replace(0, float("nan"))
+            im = im.sort_values(
+                ["item_code", "_cover", "sales_qty", "sku"],
+                ascending=[True, True, False, True],
+                na_position="last",
+            )
+            for item_code, grp in im.groupby("item_code"):
+                top20i = grp.head(20)
+                item_imminent_top20_map[str(item_code)] = [
+                    {
+                        "sku": str(rr["sku"]),
+                        "name": str(rr.get("name") or ""),
+                        "sales_qty": int(rr.get("sales_qty") or 0),
+                        "stock": int(rr.get("stock") or 0),
+                        "season_code": str(rr.get("season_code") or ""),
+                    }
+                    for _, rr in top20i.iterrows()
+                ]
+
+    rows = []
+    for _, r in merged.iterrows():
+        sp = r["stock_prev"]
+        sd = r["stock_delta"]
+        rows.append(
+            {
+                "item_code": str(r["item_code"]),
+                "total_stock": int(r["total_stock"]),
+                "stock_prev": int(sp) if pd.notna(sp) else None,
+                "stock_delta": int(sd) if pd.notna(sd) else None,
+                "total_sales": int(r["total_sales"]),
+                "sales_share_pct": float(r["sales_share_pct"]),
+                "oos_rate": float(r["oos_rate"]),
+                "season_oos_top": season_top_map.get(str(r["item_code"]), []),
+                "item_oos_top20": item_oos_top20_map.get(str(r["item_code"]), []),
+                "item_imminent_top20": item_imminent_top20_map.get(str(r["item_code"]), []),
+            }
+        )
+    return rows, prev_date, has_prev
 
 
 def _dashboard_impl():
@@ -802,7 +1116,71 @@ def _dashboard_impl():
     # 긴급주의용 복종 코드 목록 (전체 데이터 기준)
     urgent_categories = ["(전체)"] + sorted(all_data["category_code"].dropna().unique().tolist())
     
-    # === 2. 필터링된 데이터 처리 ===
+    # === 2. 옴니판매불가 SKU 데이터 처리 ===
+    omni_summary = None
+    omni_table = []
+    try:
+        omni_df = pd.read_sql_query(
+            """
+            SELECT style_code, sku_code, blocked_qty, top_store
+            FROM omni_blocked
+            WHERE snapshot_date = ?
+            """,
+            conn,
+            params=(latest_date,),
+        )
+        if not omni_df.empty:
+            omni_join = omni_df.merge(
+                all_data[["sku", "product_code", "name", "sales_qty", "stock"]],
+                left_on="sku_code",
+                right_on="sku",
+                how="left",
+            )
+            style_count = int(omni_join["style_code"].nunique())
+            blocked_total = int(omni_join["blocked_qty"].sum())
+            store_count = int(
+                omni_join["top_store"].fillna("").replace("", pd.NA).dropna().nunique()
+            )
+            omni_summary = {
+                "style_count": style_count,
+                "blocked_total": blocked_total,
+                "store_count": store_count,
+            }
+            omni_view = omni_join.copy()
+            omni_view["sales_qty"] = omni_view["sales_qty"].fillna(0).astype(int)
+            omni_view["stock"] = omni_view["stock"].fillna(0).astype(int)
+            # 스타일코드 → 상품명: SKU로 조인된 name 우선, 없으면 상품코드(10자)=스타일코드 매칭
+            _sn = all_data[["product_code", "name"]].copy()
+            _sn["pc"] = _sn["product_code"].astype(str).str.strip()
+            _sn["nm"] = _sn["name"].fillna("").astype(str).str.strip()
+            _sn = _sn[(_sn["pc"] != "") & (_sn["nm"] != "")]
+            style_name_lookup = _sn.drop_duplicates(subset=["pc"], keep="first").set_index("pc")["nm"].to_dict()
+            omni_view["_sk"] = omni_view["style_code"].astype(str).str.strip()
+            omni_view["style_name"] = omni_view["name"].fillna("").astype(str).str.strip()
+            _miss = omni_view["style_name"] == ""
+            omni_view.loc[_miss, "style_name"] = omni_view.loc[_miss, "_sk"].map(
+                lambda k: style_name_lookup.get(k, "") if k else ""
+            )
+            omni_view = omni_view.drop(columns=["_sk"])
+            omni_view = omni_view.sort_values("blocked_qty", ascending=False)
+            omni_table = [
+                {
+                    "style_code": str(r["style_code"]),
+                    "style_name": str(r.get("style_name") or "").strip(),
+                    "sku_code": str(r["sku_code"]),
+                    "blocked_qty": int(r["blocked_qty"]),
+                    "sales_qty": int(r["sales_qty"]),
+                    "stock": int(r["stock"]),
+                    "top_store": (r.get("top_store") or ""),
+                }
+                for _, r in omni_view.iterrows()
+            ]
+    except Exception as ex:
+        print(f"[WARN] 옴니판매불가 데이터 로딩 실패: {ex}")
+        omni_summary = None
+        omni_table = []
+
+    # === 3. 필터링된 데이터 처리 ===
     view = all_data.copy()
     
     # 상태 카테고리 목록
@@ -889,6 +1267,11 @@ def _dashboard_impl():
         .to_dict(orient="records")
     )
     
+    # 아이템별 재고 현황 (스냅샷 2일 이상이면 직전 일자 대비 증감 표시)
+    item_summary, item_prev_date, item_has_prev = _build_item_inventory_summary(
+        conn, str(latest_date), latest, season_codes_selected
+    )
+
     # SKU 히스토리 차트
     sku_list = sorted(latest["sku"].astype(str).unique().tolist())
     sku_pick = sku_pick or (sku_list[0] if sku_list else None)
@@ -961,10 +1344,15 @@ def _dashboard_impl():
         },
         high_risk_summary=high_risk_summary,
         table=table,
+        omni_summary=omni_summary,
+        omni_table=omni_table,
         status_badge=_status_badge,
         sku_list=sku_list,
         chart_sku_line_html=chart_sku_line_html,
         chart_sku_delta_html=chart_sku_delta_html,
+        item_summary=item_summary,
+        item_prev_date=item_prev_date,
+        item_has_prev=item_has_prev,
     )
 
 
@@ -1032,7 +1420,7 @@ if __name__ == "__main__":
         pass
     else:
         print("=" * 70)
-        print("재고 대시보드 V2 서버 시작!")
+        print("재고 대시보드 V3 서버 시작!")
         print("=" * 70)
         print("접속 주소: http://127.0.0.1:5003")
         print("기본 비밀번호: 1234")
